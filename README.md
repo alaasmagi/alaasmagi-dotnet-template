@@ -1,1 +1,1 @@
-# dotnet-project-template
+# alaasmagi-dotnet-template
