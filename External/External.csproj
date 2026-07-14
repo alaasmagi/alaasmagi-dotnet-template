@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="alaasmagi.Base.Cache" Version="1.1.9" />
+      <PackageReference Include="alaasmagi.Base.Keycloak" Version="1.1.9" />
+      <PackageReference Include="alaasmagi.Base.Message" Version="1.1.9" />
+      <PackageReference Include="alaasmagi.Base.Message.RabbitMQ" Version="1.1.9" />
+      <PackageReference Include="StackExchange.Redis" Version="2.9.32" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Contracts\Contracts.csproj" />
+    </ItemGroup>
+
+</Project>
