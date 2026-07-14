@@ -19,8 +19,5 @@ public class AppUserEntity : BaseEntityWithMetaConcurrency
 
     [Required]
     [MaxLength(16)]
-    public string Locale { get; set; } = "et";
-
-    [MaxLength(64)]
-    public string? BankIban { get; set; }
+    public string Locale { get; set; } = "en";
 }

@@ -1,17 +1,10 @@
 using System.ComponentModel.DataAnnotations;
+using Base.Domain;
 
 namespace DTO.Web;
 
-public class AppUserDto
+public class AppUserDto : BaseEntityWithConcurrency
 {
-    public Guid Id { get; set; }
-
-    public DateTime CreatedAt { get; set; }
-    public string? CreatedBy { get; set; }
-    public DateTime UpdatedAt { get; set; }
-    public string? UpdatedBy { get; set; }
-    public string? ConcurrencyToken { get; set; }
-
     [Required]
     [StringLength(320)]
     public string Email { get; set; } = default!;
@@ -26,8 +19,5 @@ public class AppUserDto
 
     [Required]
     [StringLength(16)]
-    public string Locale { get; set; } = "et";
-
-    [StringLength(64)]
-    public string? BankIban { get; set; }
+    public string Locale { get; set; } = "en";
 }

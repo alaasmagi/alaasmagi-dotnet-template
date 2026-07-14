@@ -10,16 +10,11 @@ public class AppUserDtoMapper : IMapper<AppUserDto, AppUser>
         return entity == null ? null : new AppUserDto
         {
             Id = entity.Id,
-            CreatedAt = entity.CreatedAt,
-            CreatedBy = entity.CreatedBy,
-            UpdatedAt = entity.UpdatedAt,
-            UpdatedBy = entity.UpdatedBy,
             ConcurrencyToken = entity.ConcurrencyToken,
             Email = entity.Email,
             Username = entity.Username,
             FullName = entity.FullName,
             Locale = entity.Locale,
-            BankIban = entity.BankIban
         };
     }
 
@@ -33,16 +28,11 @@ public class AppUserDtoMapper : IMapper<AppUserDto, AppUser>
         return entity == null ? null : new AppUser
         {
             Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id,
-            CreatedAt = entity.CreatedAt,
-            CreatedBy = entity.CreatedBy ?? string.Empty,
-            UpdatedAt = entity.UpdatedAt,
-            UpdatedBy = entity.UpdatedBy ?? string.Empty,
             ConcurrencyToken = entity.ConcurrencyToken ?? string.Empty,
             Email = entity.Email,
             Username = entity.Username,
             FullName = entity.FullName,
             Locale = entity.Locale,
-            BankIban = entity.BankIban
         };
     }
 
