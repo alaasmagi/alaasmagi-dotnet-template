@@ -15,11 +15,9 @@ public class RabbitMqEventConsumer : RabbitMqConsumerBase<JsonElement>
         ILogger<RabbitMqEventConsumer> logger)
         : base(
             connections,
-            options,
             handler,
             logger,
-            queueName: appOptions.Queue,
-            routingKeyPatterns: appOptions.ConsumerRoutingKeys)
+            queueName: appOptions.Queue)
     {
     }
 }

@@ -7,11 +7,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="alaasmagi.Base.Cache" Version="1.1.9" />
-      <PackageReference Include="alaasmagi.Base.Keycloak" Version="1.1.9" />
-      <PackageReference Include="alaasmagi.Base.Message" Version="1.1.9" />
-      <PackageReference Include="alaasmagi.Base.Message.RabbitMQ" Version="1.1.9" />
-      <PackageReference Include="StackExchange.Redis" Version="2.9.32" />
+      <PackageReference Include="alaasmagi.Base.Cache" Version="1.3.0" />
+      <PackageReference Include="alaasmagi.Base.Keycloak" Version="1.3.0" />
+      <PackageReference Include="alaasmagi.Base.Message" Version="1.3.0" />
+      <PackageReference Include="alaasmagi.Base.Message.RabbitMQ" Version="1.3.0" />
+      <PackageReference Include="StackExchange.Redis" Version="3.0.25" />
     </ItemGroup>
 
     <ItemGroup>

@@ -14,15 +14,13 @@ public class RabbitMqEventPublisher(
         TContent content,
         CancellationToken ct = default)
     {
-        var envelope = new BaseEventEnvelope<TContent>
-        {
-            Type = type,
-            Source = options.Source,
-            Action = action,
-            Timestamp = DateTime.UtcNow,
-            Content = content
-        };
+        var envelope = BaseEventEnvelope<TContent>.Create(
+            source: options.Source,
+            tenant: string.Empty,
+            action: action,
+            contentVersion: string.Empty,
+            content: content);
 
-        return publisher.PublishAsync(action, envelope, ct);
+        return publisher.PublishAsync(envelope, cancellationToken: ct);
     }
 }

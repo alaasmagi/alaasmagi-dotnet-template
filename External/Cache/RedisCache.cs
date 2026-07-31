@@ -37,7 +37,7 @@ public class RedisCache : BaseCache, IAppCache
         CancellationToken cancellationToken = default)
     {
         await Database
-            .StringSetAsync(key, value, ResolveExpiration(options))
+            .StringSetAsync(key, value, ResolveExpiration(options), When.Always)
             .WaitAsync(cancellationToken);
     }
 

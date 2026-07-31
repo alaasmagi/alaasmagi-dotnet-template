@@ -28,15 +28,14 @@ public class RabbitMqEventHandler(
         }
 
         logger.LogInformation(
-            "Received event {EventType}/{EventAction} from {EventSource}. Add a handler branch for this event.",
-            @event.Type,
+            "Received event {EventAction} from {EventSource}. Add a handler branch for this event.",
             @event.Action,
             @event.Source);
     }
 
     private bool IsIdentityUserEvent(IBaseEventEnvelope<JsonElement> @event)
     {
-        return string.Equals(@event.Type, DefaultMessageTypes.User, StringComparison.OrdinalIgnoreCase) &&
+        return @event.Action.StartsWith("user.", StringComparison.OrdinalIgnoreCase) &&
                string.Equals(@event.Source, options.IdentitySource, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -50,10 +49,10 @@ public class RabbitMqEventHandler(
 
         switch (@event.Action)
         {
-            case DefaultMessageActions.UserCreated:
-            case DefaultMessageActions.UserUpdated:
-            case DefaultMessageActions.UserEnabled:
-            case DefaultMessageActions.UserDisabled:
+            case "user.created":
+            case "user.updated":
+            case "user.enabled":
+            case "user.disabled":
                 using (var scope = scopeFactory.CreateScope())
                 {
                     var appUserRepository = scope.ServiceProvider.GetRequiredService<IAppUserRepository>();
@@ -68,7 +67,7 @@ public class RabbitMqEventHandler(
                 logger.LogInformation("Synchronized Keycloak user {UserId}.", userId);
                 break;
 
-            case DefaultMessageActions.UserDeleted:
+            case "user.deleted":
                 using (var scope = scopeFactory.CreateScope())
                 {
                     var appUserRepository = scope.ServiceProvider.GetRequiredService<IAppUserRepository>();
