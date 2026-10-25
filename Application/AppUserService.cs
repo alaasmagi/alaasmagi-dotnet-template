@@ -1,4 +1,5 @@
 using Base.Application;
+using Base.Contracts.DataAccess;
 using Base.Contracts.DTO;
 using Contracts.Application;
 using Contracts.DataAccess;
@@ -21,7 +22,7 @@ public class AppUserIdentityMapper : IMapper<AppUser, AppUser>
 
 public class AppUserService(
     IAppUserRepository appUserRepository,
-    Base.Contracts.DataAccess.IBaseUow uow,
+    IBaseUow uow,
     IMapper<AppUser, AppUser> mapper)
     : BaseService<AppUser, AppUser, IAppUserRepository>(uow, appUserRepository, mapper), IAppUserService
 {
