@@ -2,7 +2,8 @@ using System.Text.Json;
 using Base.Contracts.Message;
 using Base.Keycloak.Events;
 using Base.Message;
-using Contracts.DataAccess;
+using Contracts.Application;
+using Domain;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +11,6 @@ namespace External.RabbitMQ;
 
 public class RabbitMqEventHandler(
     IServiceScopeFactory scopeFactory,
-    AppMessagingOptions options,
     ILogger<RabbitMqEventHandler> logger) : IBaseEventHandler<JsonElement>
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -21,9 +21,9 @@ public class RabbitMqEventHandler(
 
     public async Task HandleAsync(IBaseEventEnvelope<JsonElement> @event, CancellationToken ct)
     {
-        if (IsIdentityUserEvent(@event))
+        if (string.Equals(@event.Source, DefaultSources.IdentityHub, StringComparison.Ordinal))
         {
-            await HandleIdentityUserEventAsync(@event, ct);
+            await HandleIdentityEventAsync(@event);
             return;
         }
 
@@ -33,52 +33,60 @@ public class RabbitMqEventHandler(
             @event.Source);
     }
 
-    private bool IsIdentityUserEvent(IBaseEventEnvelope<JsonElement> @event)
+    private async Task HandleIdentityEventAsync(IBaseEventEnvelope<JsonElement> @event)
     {
-        return @event.Action.StartsWith("user.", StringComparison.OrdinalIgnoreCase) &&
-               string.Equals(@event.Source, options.IdentitySource, StringComparison.OrdinalIgnoreCase);
+        switch (@event.Action)
+        {
+            case "user-created":
+            case "user-updated":
+            case "user-enabled":
+            case "user-disabled":
+            {
+                var content = ReadUserEventContent(@event, out var userId);
+                using var scope = scopeFactory.CreateScope();
+                var appUserService = scope.ServiceProvider.GetRequiredService<IAppUserService>();
+                var result = await appUserService.SyncFromIdentityAsync(
+                    AppUser.FromIdentity(userId, content.Email, content.Username, content.FullName, content.Locale));
+                if (!result.Successful)
+                {
+                    throw new InvalidOperationException(
+                        $"Could not synchronize Keycloak user {userId}: {result.Error?.Code} {result.Error?.Message}");
+                }
+
+                logger.LogInformation("Synchronized Keycloak user {UserId}.", userId);
+                break;
+            }
+
+            case "user-deleted":
+            {
+                ReadUserEventContent(@event, out var userId);
+                using var scope = scopeFactory.CreateScope();
+                var appUserService = scope.ServiceProvider.GetRequiredService<IAppUserService>();
+                var result = await appUserService.RemoveFromIdentityAsync(userId);
+                if (!result.Successful)
+                {
+                    throw new InvalidOperationException(
+                        $"Could not delete Keycloak user projection {userId}: {result.Error?.Code} {result.Error?.Message}");
+                }
+
+                logger.LogInformation("Deleted Keycloak user projection {UserId}.", userId);
+                break;
+            }
+
+            default:
+                logger.LogDebug("Ignoring unsupported identity event action {EventAction}.", @event.Action);
+                break;
+        }
     }
 
-    private async Task HandleIdentityUserEventAsync(IBaseEventEnvelope<JsonElement> @event, CancellationToken ct)
+    private static UserEventContent ReadUserEventContent(IBaseEventEnvelope<JsonElement> @event, out Guid userId)
     {
         var content = @event.Content.Deserialize<UserEventContent>(SerializerOptions);
-        if (content == null || !Guid.TryParse(content.UserId, out var userId))
+        if (content == null || !Guid.TryParse(content.UserId, out userId))
         {
             throw new InvalidOperationException($"User event contains invalid userId '{content?.UserId}'.");
         }
 
-        switch (@event.Action)
-        {
-            case "user.created":
-            case "user.updated":
-            case "user.enabled":
-            case "user.disabled":
-                using (var scope = scopeFactory.CreateScope())
-                {
-                    var appUserRepository = scope.ServiceProvider.GetRequiredService<IAppUserRepository>();
-                    await appUserRepository.UpsertFromIdentityEventAsync(
-                        userId,
-                        content.Email,
-                        content.Username,
-                        content.FullName,
-                        content.Locale,
-                        ct);
-                }
-                logger.LogInformation("Synchronized Keycloak user {UserId}.", userId);
-                break;
-
-            case "user.deleted":
-                using (var scope = scopeFactory.CreateScope())
-                {
-                    var appUserRepository = scope.ServiceProvider.GetRequiredService<IAppUserRepository>();
-                    await appUserRepository.DeleteFromIdentityEventAsync(userId, ct);
-                }
-                logger.LogInformation("Deleted Keycloak user projection {UserId}.", userId);
-                break;
-
-            default:
-                logger.LogDebug("Ignoring unsupported user event action {EventAction}.", @event.Action);
-                break;
-        }
+        return content;
     }
 }

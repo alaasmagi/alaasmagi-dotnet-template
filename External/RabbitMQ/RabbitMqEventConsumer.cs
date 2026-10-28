@@ -9,7 +9,6 @@ public class RabbitMqEventConsumer : RabbitMqConsumerBase<JsonElement>
 {
     public RabbitMqEventConsumer(
         RabbitMqConnectionManager connections,
-        RabbitMqOptions options,
         AppMessagingOptions appOptions,
         IBaseEventHandler<JsonElement> handler,
         ILogger<RabbitMqEventConsumer> logger)

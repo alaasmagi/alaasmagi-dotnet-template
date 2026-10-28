@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using Application;
+using Asp.Versioning;
 using Base.Cache;
 using Base.Contracts.DataAccess;
 using Base.Contracts.DTO;
@@ -21,6 +23,7 @@ using External.Cache;
 using External.RabbitMQ;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 
@@ -32,9 +35,10 @@ public static class ServiceConfiguration
     {
         var keycloakOptions = RequiredConfiguration.KeycloakOptions();
         var rabbitMqOptions = RequiredConfiguration.RabbitMqOptions();
-        var appMessagingOptions = RequiredConfiguration.AppMessagingOptions(keycloakOptions);
+        var appMessagingOptions = RequiredConfiguration.AppMessagingOptions();
         var redisConnectionString = RequiredConfiguration.RedisConnectionString();
         var baseCacheOptions = RequiredConfiguration.BaseCacheOptions();
+        var apiRateLimitOptions = RequiredConfiguration.ApiRateLimitOptions();
 
         builder.ConfigureApplicationLogging();
         builder.ConfigureGlitchtip();
@@ -45,7 +49,8 @@ public static class ServiceConfiguration
             .AddApplicationAuthentication(keycloakOptions)
             .AddApplicationCache(redisConnectionString, baseCacheOptions)
             .AddApplicationMessaging(rabbitMqOptions, appMessagingOptions)
-            .AddApplicationMvc();
+            .AddApplicationMvc()
+            .AddApplicationApi(apiRateLimitOptions);
 
         builder.Services.ConfigureForwardedHeaders();
     }
@@ -134,6 +139,41 @@ public static class ServiceConfiguration
                 options.ViewLocationFormats.Add("/MVC/Views/{1}/{0}.cshtml");
                 options.ViewLocationFormats.Add("/MVC/Views/Shared/{0}.cshtml");
             });
+
+        return services;
+    }
+
+    private static IServiceCollection AddApplicationApi(
+        this IServiceCollection services,
+        ApiRateLimitOptions apiRateLimitOptions)
+    {
+        services.AddHealthChecks();
+        services.AddEndpointsApiExplorer();
+        services.AddSwaggerGen();
+        services
+            .AddApiVersioning(options =>
+            {
+                options.DefaultApiVersion = new ApiVersion(1, 0);
+                options.AssumeDefaultVersionWhenUnspecified = true;
+                options.ReportApiVersions = true;
+            })
+            .AddMvc()
+            .AddApiExplorer(options =>
+            {
+                options.GroupNameFormat = "'v'VVV";
+                options.SubstituteApiVersionInUrl = true;
+            });
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddFixedWindowLimiter(RateLimitPolicies.Api, limiterOptions =>
+            {
+                limiterOptions.PermitLimit = apiRateLimitOptions.PermitLimit;
+                limiterOptions.Window = TimeSpan.FromSeconds(apiRateLimitOptions.WindowSeconds);
+                limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                limiterOptions.QueueLimit = apiRateLimitOptions.QueueLimit;
+            });
+        });
 
         return services;
     }

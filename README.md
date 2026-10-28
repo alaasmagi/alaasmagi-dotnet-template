@@ -11,7 +11,7 @@ projection of the authenticated Keycloak user.
 ## Features
 
 - Clean layered solution split into `Domain`, `DTO`, `Contracts`, `DataAccess`, `Application`,
-  `External`, and `Web`.
+  `External`, `Web`, and `Tests` (NUnit).
 - `AppUser` domain model, EF entity, web DTO, bidirectional mappers, repository, application service,
   and CRUD API controller.
 - Keycloak OpenID Connect authentication through `alaasmagi.Base.Keycloak`.
@@ -26,7 +26,7 @@ projection of the authenticated Keycloak user.
 - Fixed-window API rate limiting.
 - PostgreSQL EF Core context with design-time factory for migrations.
 - Environment-driven configuration loaded from `.env`.
-- Complete `.env.example` with example values for database, Redis, Keycloak, RabbitMQ, Glitchtip, and ports.
+- Complete `.env.example` listing every variable for database, Redis, Keycloak, RabbitMQ, Glitchtip, and ports.
 - Central build settings in `Directory.Build.props`.
 
 ## Technology
@@ -96,6 +96,11 @@ projection of the authenticated Keycloak user.
 |   |   |-- Models
 |   |   `-- Views
 |   `-- Program.cs
+|-- Tests
+|   |-- AppUserServiceTests.cs
+|   |-- AppUserTests.cs
+|   |-- MapperTests.cs
+|   `-- MessagingTests.cs
 |-- .env.example
 |-- Directory.Build.props
 `-- alaasmagi-dotnet-template.sln
@@ -153,10 +158,11 @@ Contains EF Core implementation.
 - `AppDbContext` defines the database context.
 - `AppDbContextFactory` supports EF Core design-time commands.
 - `AppUserRepository` inherits `BaseRepository<AppUser, AppUserEntity, IMapper<AppUser, AppUserEntity>>`
-  from `alaasmagi.Base.DataAccess.EF`.
+  from `alaasmagi.Base.DataAccess.EF` and adds no custom queries.
 - `DataAccessUow` inherits `BaseUow<AppDbContext>`.
 
-The Base repository stages changes on the DbContext. The Unit of Work commits them.
+The Base repository stages changes on the DbContext and sets metadata and concurrency tokens. It never
+saves; the Unit of Work commits.
 
 ### `Application`
 
@@ -174,6 +180,12 @@ The Base service handles the usual CRUD flow:
 - re-reads persisted rows after writes
 - returns `IMethodResponse<T>` instead of throwing for expected failures
 
+`AppUserService` adds `SyncFromIdentityAsync` (create or update the local user from a Keycloak event)
+and `RemoveFromIdentityAsync`. Both stage changes through the repository and commit with
+`IBaseUow.TrySaveChangesAsync`, so rejected writes come back as a failed `IMethodResponse<T>`.
+Normalization of identity data (trimming, default locale) lives on the domain entity in
+`AppUser.FromIdentity`.
+
 ### `External`
 
 Contains infrastructure adapters for systems outside this service.
@@ -189,18 +201,23 @@ Redis cache support is built on `alaasmagi.Base.Contracts.Cache`, `alaasmagi.Bas
 
 RabbitMQ support is built on `alaasmagi.Base.Message` and `alaasmagi.Base.Message.RabbitMQ`.
 
-- `RabbitMqEventPublisher` publishes fixed-schema Base event envelopes.
-- `RabbitMqEventConsumer` subscribes to configured routing keys.
-- `RabbitMqEventHandler` handles incoming events.
-- Keycloak user lifecycle events are consumed as `UserEventContent` from `alaasmagi.Base.Keycloak.Events`
-  and synchronized into the local `AppUsers` table.
+- `RabbitMqEventPublisher` implements `IAppEventPublisher` and publishes Base event envelopes. The app slug
+  (`APP_EVENT_SOURCE`) is both `source` and `tenant`, so the routing key is `<slug>.<slug>.<action>`.
+  Actions are single hyphenated segments (e.g. `invoice-created`). Broker failures are returned as a
+  failed `IMethodResponse<bool>` with code `PUBLISH_FAILED`.
+- `RabbitMqEventConsumer` consumes the queue named by `RABBITMQ_QUEUE`. Queue bindings are set up
+  manually, not in code.
+- `RabbitMqEventHandler` handles incoming events. Keycloak user lifecycle events (source `identity-hub`,
+  actions `user-created`, `user-updated`, `user-enabled`, `user-disabled`, `user-deleted`) are read as
+  `UserEventContent` from `alaasmagi.Base.Keycloak.Events` and passed to `IAppUserService`, which keeps the
+  local `AppUsers` table synchronized. Events that fail are logged and rejected without requeue.
 
 ### `Web`
 
 Composition root and delivery layer.
 
-- `Program.cs` wires the request pipeline.
-- `Configuration` loads env vars and registers services.
+- `Program.cs` only loads `.env`, calls the `Configuration` extensions and wires the request pipeline.
+- `Configuration` loads env vars and registers all services, including API versioning and rate limiting.
 - `MVC` contains the default web shell and authentication UI.
 - `API` contains JSON API controllers.
 
@@ -254,16 +271,23 @@ Key Base conventions used here:
 
 ## Configuration
 
-Copy `.env.example` to `.env` and replace example values.
+Copy `.env.example` to `.env` and fill in the values. The code has no built-in defaults; a missing
+required value fails at startup.
 
 Required runtime values:
 
 ```text
 DATABASE_CONNECTION_STRING
 REDIS_CONNECTION_STRING
+CACHE_KEY_PREFIX
+CACHE_DEFAULT_ABSOLUTE_EXPIRATION_SECONDS
 RABBITMQ_URI
 RABBITMQ_QUEUE
 RABBITMQ_EXCHANGE
+APP_EVENT_SOURCE
+RATE_LIMIT_PERMIT_LIMIT
+RATE_LIMIT_WINDOW_SECONDS
+RATE_LIMIT_QUEUE_LIMIT
 KEYCLOAK_AUTHORITY
 KEYCLOAK_CLIENT_ID
 KEYCLOAK_CLIENT_SECRET
@@ -276,15 +300,8 @@ APP_PORT
 PORT
 ASPNETCORE_URLS
 HOST_PORT
-CACHE_KEY_PREFIX
-CACHE_DEFAULT_ABSOLUTE_EXPIRATION_SECONDS
-RABBITMQ_CONSUMER_ROUTING_KEYS
-APP_EVENT_SOURCE
-GLITCHTIP_DSN
-GLITCHTIP_RELEASE
-RATE_LIMIT_PERMIT_LIMIT
-RATE_LIMIT_WINDOW_SECONDS
-RATE_LIMIT_QUEUE_LIMIT
+GLITCHTIP_DSN          (empty disables Glitchtip)
+GLITCHTIP_RELEASE      (required when GLITCHTIP_DSN is set)
 ```
 
 `DotEnvConfiguration` searches upward from the current working directory for `.env` and loads values
@@ -331,8 +348,9 @@ remain non-secret and generic.
 
 ### RabbitMQ topology is configuration-driven
 
-The service reads RabbitMQ host/credentials/exchange/queue/routing keys from env vars. Event payloads
-use the Base fixed envelope, so only `content` varies per event type.
+The service reads RabbitMQ host/credentials/exchange/queue from env vars. Exchanges, queues and bindings
+are created manually, never in code. Event payloads use the Base fixed envelope, so only `content`
+varies per event type.
 
 ### Redis cache adapter lives under External
 
@@ -365,7 +383,7 @@ supported API version headers.
 ### API rate limiting
 
 API controllers use ASP.NET Core's built-in rate limiting middleware with a named fixed-window policy.
-The default is 100 requests per 60 seconds with no queueing. Configure it with:
+Configure it with:
 
 ```text
 RATE_LIMIT_PERMIT_LIMIT
@@ -380,6 +398,12 @@ Restore and build:
 ```bash
 dotnet restore alaasmagi-dotnet-template.sln
 dotnet build alaasmagi-dotnet-template.sln
+```
+
+Run the tests:
+
+```bash
+dotnet test alaasmagi-dotnet-template.sln
 ```
 
 Run the web host:
@@ -412,6 +436,8 @@ Prefer Base implementations first:
 - Use `BaseService` for CRUD application services.
 - Use `IAppCache` / `IBaseCache` for cache reads and writes.
 - Use `BaseEventEnvelope<TContent>` for published events.
-- Use `RabbitMqConsumerBase<TContent>` for consumers.
+- Use `RabbitMqConsumerBase<TContent>` for consumers, or `RabbitMqDeliveryConsumerBase` when the handler
+  needs the routing key or must choose between ack, requeue and reject.
+- Add unit tests for new logic in `Tests`.
 
 Only write custom behavior where the feature differs from generic CRUD or generic messaging.

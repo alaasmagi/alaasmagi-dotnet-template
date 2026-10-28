@@ -78,7 +78,7 @@ public static class RequiredConfiguration
         };
     }
 
-    public static AppMessagingOptions AppMessagingOptions(KeycloakOptions keycloakOptions)
+    public static AppMessagingOptions AppMessagingOptions()
     {
         return new AppMessagingOptions
         {
@@ -86,22 +86,29 @@ public static class RequiredConfiguration
                 Environment.GetEnvironmentVariable("RABBITMQ_QUEUE"),
                 "RabbitMQ consumer queue",
                 "RABBITMQ_QUEUE"),
-            Source = Optional("APP_EVENT_SOURCE") ?? keycloakOptions.ClientId ?? KeycloakRealmName(keycloakOptions.Authority),
-            IdentitySource = $"identity.{KeycloakRealmName(keycloakOptions.Authority)}",
-            ConsumerRoutingKeys = OptionalList("RABBITMQ_CONSUMER_ROUTING_KEYS", ["user.*"])
+            Source = Required(
+                Environment.GetEnvironmentVariable("APP_EVENT_SOURCE"),
+                "Event source and tenant of published events",
+                "APP_EVENT_SOURCE")
         };
     }
 
     public static string? GlitchtipDsn() => Optional("GLITCHTIP_DSN");
 
-    public static string GlitchtipRelease() => Optional("GLITCHTIP_RELEASE") ?? "dotnet-template";
+    public static string GlitchtipRelease()
+    {
+        return Required(
+            Environment.GetEnvironmentVariable("GLITCHTIP_RELEASE"),
+            "Glitchtip release",
+            "GLITCHTIP_RELEASE");
+    }
 
     public static ApiRateLimitOptions ApiRateLimitOptions()
     {
         return new ApiRateLimitOptions(
-            PermitLimit: OptionalPositiveInt("RATE_LIMIT_PERMIT_LIMIT", 100),
-            WindowSeconds: OptionalPositiveInt("RATE_LIMIT_WINDOW_SECONDS", 60),
-            QueueLimit: OptionalNonNegativeInt("RATE_LIMIT_QUEUE_LIMIT", 0));
+            PermitLimit: RequiredPositiveInt("RATE_LIMIT_PERMIT_LIMIT"),
+            WindowSeconds: RequiredPositiveInt("RATE_LIMIT_WINDOW_SECONDS"),
+            QueueLimit: RequiredNonNegativeInt("RATE_LIMIT_QUEUE_LIMIT"));
     }
 
     public static string RedisConnectionString()
@@ -116,11 +123,14 @@ public static class RequiredConfiguration
     {
         return new BaseCacheOptions
         {
-            KeyPrefix = Optional("CACHE_KEY_PREFIX") ?? "app-service",
+            KeyPrefix = Required(
+                Environment.GetEnvironmentVariable("CACHE_KEY_PREFIX"),
+                "Cache key prefix",
+                "CACHE_KEY_PREFIX"),
             DefaultEntryOptions = new BaseCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(
-                    OptionalPositiveInt("CACHE_DEFAULT_ABSOLUTE_EXPIRATION_SECONDS", 300))
+                    RequiredPositiveInt("CACHE_DEFAULT_ABSOLUTE_EXPIRATION_SECONDS"))
             }
         };
     }
@@ -131,31 +141,9 @@ public static class RequiredConfiguration
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    private static string[] OptionalList(string key, string[] fallback)
+    private static int RequiredPositiveInt(string key)
     {
-        var value = Environment.GetEnvironmentVariable(key);
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return fallback;
-        }
-
-        var values = value
-            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToArray();
-
-        return values.Length == 0 ? fallback : values;
-    }
-
-    private static int OptionalPositiveInt(string key, int fallback)
-    {
-        var value = Optional(key);
-        if (value == null)
-        {
-            return fallback;
-        }
-
-        if (int.TryParse(value, out var parsed) && parsed > 0)
+        if (int.TryParse(Environment.GetEnvironmentVariable(key), out var parsed) && parsed > 0)
         {
             return parsed;
         }
@@ -163,15 +151,9 @@ public static class RequiredConfiguration
         throw new InvalidOperationException($"{key} must be a positive integer.");
     }
 
-    private static int OptionalNonNegativeInt(string key, int fallback)
+    private static int RequiredNonNegativeInt(string key)
     {
-        var value = Optional(key);
-        if (value == null)
-        {
-            return fallback;
-        }
-
-        if (int.TryParse(value, out var parsed) && parsed >= 0)
+        if (int.TryParse(Environment.GetEnvironmentVariable(key), out var parsed) && parsed >= 0)
         {
             return parsed;
         }
@@ -190,24 +172,6 @@ public static class RequiredConfiguration
         return string.IsNullOrWhiteSpace(path)
             ? "/"
             : Uri.UnescapeDataString(path);
-    }
-
-    private static string KeycloakRealmName(string authority)
-    {
-        var uri = new Uri(authority);
-        var pathParts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var realmsIndex = Array.FindIndex(pathParts, part => part.Equals("realms", StringComparison.OrdinalIgnoreCase));
-        if (realmsIndex >= 0 && realmsIndex + 1 < pathParts.Length)
-        {
-            return pathParts[realmsIndex + 1];
-        }
-
-        if (pathParts.Length > 0)
-        {
-            return pathParts[^1];
-        }
-
-        throw new InvalidOperationException("KEYCLOAK_AUTHORITY must include the realm path, for example https://host/realms/app-service.");
     }
 
     private static string Required(string? value, string description, string key)

@@ -8,6 +8,7 @@
 
     <ItemGroup>
       <PackageReference Include="alaasmagi.Base.Cache" Version="1.4.0" />
+      <PackageReference Include="alaasmagi.Base.DTO" Version="1.4.0" />
       <PackageReference Include="alaasmagi.Base.Keycloak" Version="1.4.0" />
       <PackageReference Include="alaasmagi.Base.Message" Version="1.4.0" />
       <PackageReference Include="alaasmagi.Base.Message.RabbitMQ" Version="1.4.0" />
