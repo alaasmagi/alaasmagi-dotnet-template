@@ -38,7 +38,7 @@ projection of the authenticated Keycloak user.
 - Redis caching
 - RabbitMQ topic-exchange messaging
 - Sentry/Glitchtip-compatible error reporting
-- `alaasmagi.Base.*` version `1.1.9`
+- `alaasmagi.Base.*` version `1.4.0`
 
 ## Folder Tree
 
@@ -84,9 +84,11 @@ projection of the authenticated Keycloak user.
 |   |   `-- Controllers
 |   |       `-- AppUsersController.cs
 |   |-- Configuration
+|   |   |-- ApiRateLimitOptions.cs
 |   |   |-- DotEnvConfiguration.cs
 |   |   |-- GlitchtipConfiguration.cs
 |   |   |-- LoggingConfiguration.cs
+|   |   |-- RateLimitPolicies.cs
 |   |   |-- RequiredConfiguration.cs
 |   |   `-- ServiceConfiguration.cs
 |   |-- MVC
@@ -103,13 +105,14 @@ projection of the authenticated Keycloak user.
 
 ### `Domain`
 
-Contains business/domain models. `AppUser` inherits `BaseEntityWithMetaConcurrency` from
+Contains business/domain models. `AppUser` inherits `BaseEntityWithConcurrency` from
 `alaasmagi.Base.Domain`, so the entity has:
 
 - `Id`
-- `CreatedAt` / `CreatedBy`
-- `UpdatedAt` / `UpdatedBy`
 - `ConcurrencyToken`
+
+The persistence entity `AppUserEntity` inherits `BaseEntityWithMetaConcurrency` and also stores
+`CreatedAt` / `CreatedBy` and `UpdatedAt` / `UpdatedBy`.
 
 Use this project for domain concepts and behavior that should not depend on EF, ASP.NET Core, or
 transport infrastructure.
@@ -232,13 +235,13 @@ plumbing.
 | `alaasmagi.Base.DTO` | Result/error implementations and DTO helpers. |
 | `alaasmagi.Base.Contracts.Application` | `IBaseService<T>` service contract. |
 | `alaasmagi.Base.Contracts.Cache` | `IBaseCache`, cache result, serializer, key builder, and entry option contracts. |
-| `alaasmagi.Base.Contracts.DataAccess` | `IBaseRepository<T>` and `IBaseUow`. |
+| `alaasmagi.Base.Contracts.DataAccess` | `IBaseRepository<T>` and `IBaseUow` (`SaveChangesAsync`, and `TrySaveChangesAsync` which returns rejected writes as a failed `IMethodResponse<int>`). |
 | `alaasmagi.Base.DataAccess.EF` | EF Core `BaseRepository` and `BaseUow`. |
 | `alaasmagi.Base.Application` | `BaseService` CRUD application-service implementation. |
 | `alaasmagi.Base.Cache` | `BaseCache`, JSON serializer, key builder, cache result, and cache options. |
 | `alaasmagi.Base.Message` | Event envelope model and default message constants. |
-| `alaasmagi.Base.Message.RabbitMQ` | RabbitMQ publisher, consumer base class, and DI helpers. |
-| `alaasmagi.Base.Keycloak` | Keycloak OIDC auth and identity event content DTOs. |
+| `alaasmagi.Base.Message.RabbitMQ` | RabbitMQ publisher, consumer base classes (`RabbitMqConsumerBase<TContent>` for envelopes, `RabbitMqDeliveryConsumerBase` for raw deliveries with explicit ack/requeue/reject), and DI helpers. |
+| `alaasmagi.Base.Keycloak` | Keycloak OIDC auth (configurable scopes, cookie paths, claim types and PAR), optional JWT bearer scheme, and identity event content DTOs. |
 
 Key Base conventions used here:
 
@@ -247,7 +250,7 @@ Key Base conventions used here:
 - Services coordinate repository calls and Unit of Work commits.
 - Optimistic concurrency is enabled by entities implementing the Base concurrency contract.
 - Cache access goes through string-keyed `IBaseCache` abstractions.
-- Messaging uses the fixed envelope shape `{ type, source, action, timestamp, content }`.
+- Messaging uses the fixed envelope shape `{ id, source, tenant, action, timestamp, contentVersion, content }`.
 
 ## Configuration
 
